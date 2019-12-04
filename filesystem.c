@@ -1,5 +1,5 @@
 /*
- * ROFS - The read-only filesystem for FUSE.
+ * fs - The read-only filesystem for FUSE.
  * Copyright 2005,2006,2008 Matthew Keller. kellermg@potsdam.edu and others.
  * v2008.09.24
  *
@@ -12,15 +12,15 @@
  *
  * Consider this code GPLv2.
  *
- * Compile: gcc -o rofs -Wall -ansi -W -std=c99 -g -ggdb -D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 -lfuse rofs.c
- * Mount: rofs readwrite_filesystem mount_point
+ * Compile: gcc -o fs -Wall -ansi -W -std=c99 -g -ggdb -D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 -lfuse fs.c
+ * Mount: fs readwrite_filesystem mount_point
  *
  */
 
 
 #define FUSE_USE_VERSION 26
 
-static const char* rofsVersion = "2008.09.24";
+static const char* fsVersion = "2008.09.24";
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -35,14 +35,14 @@ static const char* rofsVersion = "2008.09.24";
 #include <sys/xattr.h>
 #include <dirent.h>
 #include <unistd.h>
-#include <fuse.h>
+#include <fuse/fuse.h>
 #include "libmagic.h"
-#include "ansilove.h"
+#include <ansilove.h>
 
 // Global to store our read-write path
 char *rw_path;
 
-// Translate an rofs path into it's underlying filesystem path
+// Translate an fs path into it's underlying filesystem path
 static char* translate_path(const char* path)
 {
 
@@ -66,7 +66,7 @@ static char* translate_path(const char* path)
 *
 ******************************/
 
-static int rofs_getattr(const char *path, struct stat *st_data)
+static int fs_getattr(const char *path, struct stat *st_data)
 {
     int res;
     char *upath=translate_path(path);
@@ -79,7 +79,7 @@ static int rofs_getattr(const char *path, struct stat *st_data)
     return 0;
 }
 
-static int rofs_readlink(const char *path, char *buf, size_t size)
+static int fs_readlink(const char *path, char *buf, size_t size)
 {
     int res;
     char *upath=translate_path(path);
@@ -93,7 +93,7 @@ static int rofs_readlink(const char *path, char *buf, size_t size)
     return 0;
 }
 
-static int rofs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,off_t offset, struct fuse_file_info *fi)
+static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,off_t offset, struct fuse_file_info *fi)
 {
     DIR *dp;
     struct dirent *de;
@@ -118,7 +118,7 @@ static int rofs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,off_
         printf("%s\n", temp);
         int i = istext(temp);
         printf("%d\n", i);
-        if (istext(temp) == 1){
+        if (istext(temp) == 1 || isdir(temp) == 1){
             struct stat st;
             memset(&st, 0, sizeof(st));
             st.st_ino = de->d_ino;
@@ -133,7 +133,7 @@ static int rofs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,off_
     return 0;
 }
 
-static int rofs_open(const char *path, struct fuse_file_info *finfo)
+static int fs_open(const char *path, struct fuse_file_info *finfo)
 {
     int res;
 
@@ -158,30 +158,32 @@ static int rofs_open(const char *path, struct fuse_file_info *finfo)
     return 0;
 }
 
-static int rofs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *finfo)
+static int fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *finfo)
 {
-    int fd;
-    int res;
+    int fd = 0;
+    fd += 1;
+    int res = 0;
     (void)finfo;
 
-    char *upath=translate_path(path);
-    fd = open(upath, O_RDONLY);
-    free(upath);
-    if(fd == -1) {
-        res = -errno;
-        return res;
-    }
-    res = pread(fd, buf, size, offset);
+    struct ansilove_ctx ctx;
+    struct ansilove_options options;
 
-    if(res == -1) {
-        res = -errno;
+    char *upath=translate_path(path);
+
+    ansilove_init(&ctx, &options);
+    ansilove_loadfile(&ctx, upath);
+    ansilove_ansi(&ctx, &options);
+    
+    for (int i = 0; i < ctx.png.length; i++){
+        buf[i] = ctx.png.buffer[i];
     }
-    close(fd);
+
+    ansilove_clean(&ctx);
     return res;
 }
 
 
-static int rofs_statfs(const char *path, struct statvfs *st_buf)
+static int fs_statfs(const char *path, struct statvfs *st_buf)
 {
     int res;
     char *upath=translate_path(path);
@@ -195,7 +197,7 @@ static int rofs_statfs(const char *path, struct statvfs *st_buf)
 }
 
 
-static int rofs_access(const char *path, int mode)
+static int fs_access(const char *path, int mode)
 {
     int res;
     char *upath=translate_path(path);
@@ -218,7 +220,7 @@ static int rofs_access(const char *path, int mode)
 /*
  * Get the value of an extended attribute.
  */
-static int rofs_getxattr(const char *path, const char *name, char *value, size_t size)
+static int fs_getxattr(const char *path, const char *name, char *value, size_t size)
 {
     int res;
 
@@ -234,7 +236,7 @@ static int rofs_getxattr(const char *path, const char *name, char *value, size_t
 /*
  * List the supported extended attributes.
  */
-static int rofs_listxattr(const char *path, char *list, size_t size)
+static int fs_listxattr(const char *path, char *list, size_t size)
 {
     int res;
 
@@ -249,18 +251,18 @@ static int rofs_listxattr(const char *path, char *list, size_t size)
 }
 
 
-struct fuse_operations rofs_oper = {
-    .getattr     = rofs_getattr,
-    .readlink    = rofs_readlink,
-    .readdir     = rofs_readdir,
-    .open        = rofs_open,
-    .read        = rofs_read,
-    .statfs      = rofs_statfs,
-    .access      = rofs_access,
+struct fuse_operations fs_oper = {
+    .getattr     = fs_getattr,
+    .readlink    = fs_readlink,
+    .readdir     = fs_readdir,
+    .open        = fs_open,
+    .read        = fs_read,
+    .statfs      = fs_statfs,
+    .access      = fs_access,
 
     /* Extended attributes support for userland interaction */
-    .getxattr    = rofs_getxattr,
-    .listxattr   = rofs_listxattr,
+    .getxattr    = fs_getxattr,
+    .listxattr   = fs_listxattr,
 };
 enum {
     KEY_HELP,
@@ -281,7 +283,7 @@ static void usage(const char* progname)
             "\n", progname);
 }
 
-static int rofs_parse_opt(void *data, const char *arg, int key,
+static int fs_parse_opt(void *data, const char *arg, int key,
                           struct fuse_args *outargs)
 {
     (void) data;
@@ -304,7 +306,7 @@ static int rofs_parse_opt(void *data, const char *arg, int key,
         usage(outargs->argv[0]);
         exit(0);
     case KEY_VERSION:
-        fprintf(stdout, "ROFS version %s\n", rofsVersion);
+        fprintf(stdout, "fs version %s\n", fsVersion);
         exit(0);
     default:
         fprintf(stderr, "see `%s -h' for usage\n", outargs->argv[0]);
@@ -313,7 +315,7 @@ static int rofs_parse_opt(void *data, const char *arg, int key,
     return 1;
 }
 
-static struct fuse_opt rofs_opts[] = {
+static struct fuse_opt fs_opts[] = {
     FUSE_OPT_KEY("-h",          KEY_HELP),
     FUSE_OPT_KEY("--help",      KEY_HELP),
     FUSE_OPT_KEY("-V",          KEY_VERSION),
@@ -326,7 +328,7 @@ int main(int argc, char *argv[])
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
     int res;
 
-    res = fuse_opt_parse(&args, &rw_path, rofs_opts, rofs_parse_opt);
+    res = fuse_opt_parse(&args, &rw_path, fs_opts, fs_parse_opt);
     if (res != 0)
     {
         fprintf(stderr, "Invalid arguments\n");
@@ -340,7 +342,7 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    fuse_main(args.argc, args.argv, &rofs_oper, NULL);
+    fuse_main(args.argc, args.argv, &fs_oper, NULL);
 
     return 0;
 }
