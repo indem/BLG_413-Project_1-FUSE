@@ -70,7 +70,6 @@ static int fs_getattr(const char *path, struct stat *st_data)
 {
     int res;
     char *upath=translate_path(path);
-
     res = lstat(upath, st_data);
     free(upath);
     if(res == -1) {
@@ -93,6 +92,31 @@ static int fs_readlink(const char *path, char *buf, size_t size)
     return 0;
 }
 
+char* change_extension(char* orig_name){
+    //if text file has extension: 
+    int ext_start = 0;
+    char * dotaddr = strrchr(orig_name, '.');
+    if(dotaddr){
+        ext_start = dotaddr - orig_name;
+        // irem.txt ext_start = 4
+        char* new_name;
+        new_name = (char *)malloc(sizeof(char) * (ext_start + 5));
+        memset(new_name, '\0', sizeof(new_name));
+        strncpy(new_name, orig_name, ext_start);
+        new_name[ext_start] = '\0';
+        strncat(new_name, ".png", 4);
+
+        return new_name;
+    }
+    char *new_name;
+    new_name = (char *)malloc(sizeof(char)*(strlen(orig_name)+ 5 ));
+    memset(new_name, '\0', sizeof(new_name));
+    strncpy(new_name, orig_name, strlen(orig_name));
+    strncat(new_name,".png", 4);
+
+    return new_name;
+}
+
 static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,off_t offset, struct fuse_file_info *fi)
 {
     DIR *dp;
@@ -105,6 +129,7 @@ static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,off_t 
     char *upath=translate_path(path);
 
     dp = opendir(upath);
+
     if(dp == NULL) {
         res = -errno;
         return res;
@@ -113,26 +138,32 @@ static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,off_t 
 
     while((de = readdir(dp)) != NULL) {
         char temp[1000] = "";
+        strcpy(temp, de->d_name);
+        char* new_name = change_extension(temp);
         strcpy(temp, upath);
+        if (temp[strlen(temp) - 1] != '/')
+            strcat(temp, "/");
         strcat(temp, de->d_name);
-        printf("%s\n", temp);
+ 
+        printf("TEMP: %s\n", temp);
         int i = istext(temp);
-        printf("%d\n", i);
+
         if (istext(temp) == 1 || isdir(temp) == 1){
+            printf("d->d_name: %s\n", de->d_name);
             struct stat st;
             memset(&st, 0, sizeof(st));
             st.st_ino = de->d_ino;
             st.st_mode = de->d_type << 12;
             if (filler(buf, de->d_name, &st, 0))
-                break;
+                 break;
         }
+
     }
-
-    free(upath);
     closedir(dp);
+    free(upath);
     return 0;
+    
 }
-
 static int fs_open(const char *path, struct fuse_file_info *finfo)
 {
     int res;
@@ -158,7 +189,7 @@ static int fs_open(const char *path, struct fuse_file_info *finfo)
     return 0;
 }
 
-static int fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *finfo)
+static int fs_read(const char *path, uint8_t *buf, size_t size, off_t offset, struct fuse_file_info *finfo)
 {
     int fd = 0;
     fd += 1;
@@ -173,11 +204,12 @@ static int fs_read(const char *path, char *buf, size_t size, off_t offset, struc
     ansilove_init(&ctx, &options);
     ansilove_loadfile(&ctx, upath);
     ansilove_ansi(&ctx, &options);
-    
+    ansilove_savefile(&ctx, "/tmp/example.png");
+
     for (int i = 0; i < ctx.png.length; i++){
         buf[i] = ctx.png.buffer[i];
     }
-
+    size = ctx.png.length;
     ansilove_clean(&ctx);
     return res;
 }
@@ -187,7 +219,6 @@ static int fs_statfs(const char *path, struct statvfs *st_buf)
 {
     int res;
     char *upath=translate_path(path);
-
     res = statvfs(upath, st_buf);
     free(upath);
     if (res == -1) {
@@ -239,7 +270,6 @@ static int fs_getxattr(const char *path, const char *name, char *value, size_t s
 static int fs_listxattr(const char *path, char *list, size_t size)
 {
     int res;
-
     char *upath=translate_path(path);
     res = llistxattr(upath, list, size);
     free(upath);
@@ -250,7 +280,6 @@ static int fs_listxattr(const char *path, char *list, size_t size)
 
 }
 
-
 struct fuse_operations fs_oper = {
     .getattr     = fs_getattr,
     .readlink    = fs_readlink,
@@ -259,7 +288,6 @@ struct fuse_operations fs_oper = {
     .read        = fs_read,
     .statfs      = fs_statfs,
     .access      = fs_access,
-
     /* Extended attributes support for userland interaction */
     .getxattr    = fs_getxattr,
     .listxattr   = fs_listxattr,
