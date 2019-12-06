@@ -36,9 +36,8 @@ static const char* fsVersion = "2008.09.24";
 #include <dirent.h>
 #include <unistd.h>
 #include <fuse/fuse.h>
-#include "libmagic.h"
 #include <ansilove.h>
-
+#include "libmagic.h"
 // Global to store our read-write path
 char *rw_path;
 
@@ -70,8 +69,26 @@ static int fs_getattr(const char *path, struct stat *st_data)
 {
     int res;
     char *upath=translate_path(path);
+
+    // if upath ends with .png, replace it with txt
+    char* dotaddr = strrchr(upath, '.');
+    int dotix = dotaddr - upath;
+
+    printf("Getting attributes for: %s\n", upath);
+    printf("afterdot %s\n", dotaddr);
+    if (dotaddr != NULL && !strcmp(dotaddr, ".png")){
+        printf("Entered here\n");
+        char new_path[1000] = "";
+        strncpy(new_path, upath, dotix);
+        printf("Is this path right? %s\n", new_path);
+        strcat(new_path, ".txt");
+        strcpy(upath, new_path);
+        printf("New upath: %s\n", upath);
+    }
+    
     res = lstat(upath, st_data);
     free(upath);
+
     if(res == -1) {
         return -errno;
     }
@@ -82,7 +99,7 @@ static int fs_readlink(const char *path, char *buf, size_t size)
 {
     int res;
     char *upath=translate_path(path);
-
+    printf("[fs_readlink]: upath -> %s\n", upath);
     res = readlink(upath, buf, size - 1);
     free(upath);
     if(res == -1) {
@@ -154,8 +171,19 @@ static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,off_t 
             memset(&st, 0, sizeof(st));
             st.st_ino = de->d_ino;
             st.st_mode = de->d_type << 12;
-            if (filler(buf, de->d_name, &st, 0))
-                 break;
+            
+            if (istext(temp) == 1){
+                printf("NULL????? %s\n", change_extension(de->d_name));
+                if (filler(buf, change_extension(de->d_name), &st, 0))
+                //if (filler(buf, de->d_name, &st, 0))
+                    break;
+
+            }
+            else if (isdir(temp) == 1){
+                if (filler(buf, de->d_name, &st, 0))
+                     break;
+
+            }
         }
 
     }
@@ -191,26 +219,23 @@ static int fs_open(const char *path, struct fuse_file_info *finfo)
 
 static int fs_read(const char *path, uint8_t *buf, size_t size, off_t offset, struct fuse_file_info *finfo)
 {
-    int fd = 0;
-    fd += 1;
-    int res = 0;
+    int fd;
+    int res;
     (void)finfo;
 
-    struct ansilove_ctx ctx;
-    struct ansilove_options options;
-
     char *upath=translate_path(path);
-
-    ansilove_init(&ctx, &options);
-    ansilove_loadfile(&ctx, upath);
-    ansilove_ansi(&ctx, &options);
-    ansilove_savefile(&ctx, "/tmp/example.png");
-
-    for (int i = 0; i < ctx.png.length; i++){
-        buf[i] = ctx.png.buffer[i];
+    fd = open(upath, O_RDONLY);
+    free(upath);
+    if(fd == -1) {
+        res = -errno;
+        return res;
     }
-    size = ctx.png.length;
-    ansilove_clean(&ctx);
+    res = pread(fd, buf, size, offset);
+
+    if(res == -1) {
+        res = -errno;
+    }
+    close(fd);
     return res;
 }
 
@@ -219,6 +244,7 @@ static int fs_statfs(const char *path, struct statvfs *st_buf)
 {
     int res;
     char *upath=translate_path(path);
+    printf("[fs_statfs]: upath -> %s\n", upath);
     res = statvfs(upath, st_buf);
     free(upath);
     if (res == -1) {
@@ -232,6 +258,7 @@ static int fs_access(const char *path, int mode)
 {
     int res;
     char *upath=translate_path(path);
+    printf("[fs_access]: upath -> %s\n", upath);
 
     /* Don't pretend that we allow writing
      * Chris AtLee <chris@atlee.ca>
@@ -256,6 +283,8 @@ static int fs_getxattr(const char *path, const char *name, char *value, size_t s
     int res;
 
     char *upath=translate_path(path);
+    printf("[fs_getxattr]: upath -> %s\n", upath);
+
     res = lgetxattr(upath, name, value, size);
     free(upath);
     if(res == -1) {
@@ -271,6 +300,8 @@ static int fs_listxattr(const char *path, char *list, size_t size)
 {
     int res;
     char *upath=translate_path(path);
+    printf("[fs_listxattr]: upath -> %s\n", upath);
+
     res = llistxattr(upath, list, size);
     free(upath);
     if(res == -1) {
