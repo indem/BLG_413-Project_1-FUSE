@@ -74,16 +74,28 @@ static int fs_getattr(const char *path, struct stat *st_data)
     char* dotaddr = strrchr(upath, '.');
     int dotix = dotaddr - upath;
 
-    printf("Getting attributes for: %s\n", upath);
-    printf("afterdot %s\n", dotaddr);
     if (dotaddr != NULL && !strcmp(dotaddr, ".png")){
-        printf("Entered here\n");
+        char* slashaddr = strrchr(upath, '/');
+        int slashix = slashaddr - upath;
+    
         char new_path[1000] = "";
-        strncpy(new_path, upath, dotix);
-        printf("Is this path right? %s\n", new_path);
-        strcat(new_path, ".txt");
-        strcpy(upath, new_path);
-        printf("New upath: %s\n", upath);
+        strncpy(new_path, upath, slashix + 1); // with slash
+
+        DIR *dir;
+        struct dirent *entry;
+        if ((dir = opendir(new_path)) != NULL){
+            char filename[1000] = "";
+            strncpy(filename, upath + slashix + 1, dotix - slashix);
+            
+            while ((entry = readdir(dir)) != NULL){
+                if (strncmp(entry->d_name, filename, strlen(filename)) == 0){
+                    strcat(new_path, entry->d_name);
+                    strcpy(upath, new_path);
+                    break;
+                }
+            }
+        }
+
     }
     
     res = lstat(upath, st_data);
@@ -99,7 +111,6 @@ static int fs_readlink(const char *path, char *buf, size_t size)
 {
     int res;
     char *upath=translate_path(path);
-    printf("[fs_readlink]: upath -> %s\n", upath);
     res = readlink(upath, buf, size - 1);
     free(upath);
     if(res == -1) {
@@ -162,18 +173,15 @@ static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,off_t 
             strcat(temp, "/");
         strcat(temp, de->d_name);
  
-        printf("TEMP: %s\n", temp);
         int i = istext(temp);
 
         if (istext(temp) == 1 || isdir(temp) == 1){
-            printf("d->d_name: %s\n", de->d_name);
             struct stat st;
             memset(&st, 0, sizeof(st));
             st.st_ino = de->d_ino;
             st.st_mode = de->d_type << 12;
             
             if (istext(temp) == 1){
-                printf("NULL????? %s\n", change_extension(de->d_name));
                 if (filler(buf, change_extension(de->d_name), &st, 0))
                 //if (filler(buf, de->d_name, &st, 0))
                     break;
@@ -182,16 +190,16 @@ static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,off_t 
             else if (isdir(temp) == 1){
                 if (filler(buf, de->d_name, &st, 0))
                      break;
-
             }
         }
-
     }
+
     closedir(dp);
     free(upath);
+
     return 0;
-    
 }
+
 static int fs_open(const char *path, struct fuse_file_info *finfo)
 {
     int res;
@@ -226,16 +234,20 @@ static int fs_read(const char *path, uint8_t *buf, size_t size, off_t offset, st
     char *upath=translate_path(path);
     fd = open(upath, O_RDONLY);
     free(upath);
+
     if(fd == -1) {
         res = -errno;
         return res;
     }
+
     res = pread(fd, buf, size, offset);
 
     if(res == -1) {
         res = -errno;
     }
+
     close(fd);
+
     return res;
 }
 
@@ -244,12 +256,13 @@ static int fs_statfs(const char *path, struct statvfs *st_buf)
 {
     int res;
     char *upath=translate_path(path);
-    printf("[fs_statfs]: upath -> %s\n", upath);
     res = statvfs(upath, st_buf);
     free(upath);
+
     if (res == -1) {
         return -errno;
     }
+
     return 0;
 }
 
@@ -258,7 +271,6 @@ static int fs_access(const char *path, int mode)
 {
     int res;
     char *upath=translate_path(path);
-    printf("[fs_access]: upath -> %s\n", upath);
 
     /* Don't pretend that we allow writing
      * Chris AtLee <chris@atlee.ca>
@@ -268,9 +280,11 @@ static int fs_access(const char *path, int mode)
 
     res = access(upath, mode);
     free(upath);
+
     if (res == -1) {
         return -errno;
     }
+
     return res;
 }
 
@@ -283,13 +297,14 @@ static int fs_getxattr(const char *path, const char *name, char *value, size_t s
     int res;
 
     char *upath=translate_path(path);
-    printf("[fs_getxattr]: upath -> %s\n", upath);
 
     res = lgetxattr(upath, name, value, size);
     free(upath);
+
     if(res == -1) {
         return -errno;
     }
+
     return res;
 }
 
@@ -300,13 +315,14 @@ static int fs_listxattr(const char *path, char *list, size_t size)
 {
     int res;
     char *upath=translate_path(path);
-    printf("[fs_listxattr]: upath -> %s\n", upath);
 
     res = llistxattr(upath, list, size);
     free(upath);
+
     if(res == -1) {
         return -errno;
     }
+
     return res;
 
 }
@@ -323,6 +339,7 @@ struct fuse_operations fs_oper = {
     .getxattr    = fs_getxattr,
     .listxattr   = fs_listxattr,
 };
+
 enum {
     KEY_HELP,
     KEY_VERSION,
