@@ -23,11 +23,11 @@ cmake is required for compilation.
 
     ```make```
     
-5a.  Run the following command to initialize the file system in debug mode. In debug mode, some relevant messages will be printed.
+5.  Run the following command to initialize the file system in debug mode. In debug mode, some relevant messages will be printed.
 
     ```./filesystem -d <source file> <mount point>```
 
-5b.  Or just run the following command to initialize the file system in normal mode. Messages won't be printed.
+    Or just run the following command to initialize the file system in normal mode. Messages won't be printed.
 
     ```./filesystem  <source file> <mount point>```
 
