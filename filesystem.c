@@ -182,7 +182,7 @@ static int fs_open(const char *path, struct fuse_file_info *finfo) {
     if(res == -1) {
         return -errno;
     }
-    close(res);
+
     return 0;
 }
 
