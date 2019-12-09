@@ -25,11 +25,11 @@ cmake is required for compilation.
     
 5.  Run the following command to initialize the file system in debug mode. In debug mode, some relevant messages will be printed.
 
-    ```./filesystem -d <source file> <mount point>```
+    ```./filesystem -d <source directory> <mount point>```
 
     Or just run the following command to initialize the file system in normal mode. Messages won't be printed.
 
-    ```./filesystem  <source file> <mount point>```
+    ```./filesystem  <source directory> <mount point>```
 
 ## Usage
 While the program is running, you will be able to see PNG versions of text files in the source directory when you visit the mount point, as if you are scrolling through any other directory on your computer. Any program that can open images should be able to show the images.
