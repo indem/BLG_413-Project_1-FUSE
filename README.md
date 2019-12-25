@@ -1,6 +1,8 @@
 # PROJECT 2: FUSE
 [Ezgi Paket](https://github.com/ezgipaket/) | [İrem Demirtaş](https://github.com/indem/) | [Ecem Konu](https://github.com/ecem.konu/)
 
+This is a file system developed using [FUSE](https://github.com/libfuse/libfuse), that displays text files in the source directory as PNG files. 
+
 ## Required Libraries
 * libfuse
 * libansilove 
