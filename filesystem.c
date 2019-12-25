@@ -175,14 +175,6 @@ static int fs_open(const char *path, struct fuse_file_info *finfo) {
         return -EROFS;
     }
 
-    char *upath=translate_path(path);
-    res = open("/home/irem/Desktop/temp.png", flags);
-
-    free(upath);
-    if(res == -1) {
-        return -errno;
-    }
-
     return 0;
 }
 
